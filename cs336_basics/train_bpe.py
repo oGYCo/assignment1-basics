@@ -101,21 +101,20 @@ def _count_pretokens_in_chunk(task: tuple[str | os.PathLike, int, int]) -> Count
         chunk = f.read(end - start).decode("utf-8", errors="ignore")
     return _count_pretokens_in_text(chunk)
 
-def _count_adjacent_pairs(sequences: list[list[int]], frequencies: list[int]) -> tuple[Counter[tuple[int, int]], dict[tuple[int, int], list[tuple[int, int]]]]:#注意统计的是token id而不是bytes
+def _count_adjacent_pairs(
+    sequences: list[list[int]],
+    frequencies: list[int],
+) -> tuple[Counter[tuple[int, int]], dict[tuple[int, int], set[tuple[int, int]]]]:  # 注意统计的是token id而不是bytes
     pair_counts: Counter[tuple[int, int]] = Counter()
-    pair_positions: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    pair_positions: dict[tuple[int, int], set[tuple[int, int]]] = {}
 
     for i, (seq, freq) in enumerate(zip(sequences, frequencies)):
         if len(seq) < 2:
             continue
-        left = seq[0]
         for j in range(len(seq) - 1):
-            left = seq[j]
-            right = seq[j + 1]
+            left, right = seq[j], seq[j + 1]
             pair_counts[(left, right)] += freq
-            if (left, right) not in pair_positions:
-                pair_positions[(left, right)] = []
-            pair_positions[(left, right)].append((i, j))
+            pair_positions.setdefault((left, right), set()).add((i, j))
     
     return pair_counts, pair_positions
 
@@ -129,21 +128,36 @@ def _select_best_pair(pair_counts: Counter[tuple[int, int]], token_bytes: list[b
         ),
     )
 
-def _remove_sequence_pair(seq_num: int, seq: list[int], frequency: int, pair_counts: Counter[tuple[int, int]], pair_positions: dict[tuple[int, int], list[tuple[int, int]]]):
+def _remove_sequence_pair(
+    seq_num: int,
+    seq: list[int],
+    frequency: int,
+    pair_counts: Counter[tuple[int, int]],
+    pair_positions: dict[tuple[int, int], set[tuple[int, int]]],
+):
     for i in range(len(seq) - 1):
         pair = (seq[i], seq[i + 1])
         pair_counts[pair] -= frequency
         if pair_counts[pair] == 0:
             del pair_counts[pair]
-        pair_positions[pair].remove((seq_num, i))
-        if not pair_positions[pair]:
+        positions = pair_positions.get(pair)
+        if positions is None:
+            continue
+        positions.discard((seq_num, i))
+        if not positions:
             del pair_positions[pair]
 
-def _add_sequence_pair(seq_num: int, merged_seq: list[int], frenquency: int, pair_counts: Counter[tuple[int, int]], pair_positions: dict[tuple[int, int], list[tuple[int, int]]]):
+def _add_sequence_pair(
+    seq_num: int,
+    merged_seq: list[int],
+    frequency: int,
+    pair_counts: Counter[tuple[int, int]],
+    pair_positions: dict[tuple[int, int], set[tuple[int, int]]],
+):
     for i in range(len(merged_seq) - 1):
         pair = (merged_seq[i], merged_seq[i + 1])
-        pair_counts[pair] += frenquency
-        pair_positions.setdefault(pair, []).append((seq_num, i))
+        pair_counts[pair] += frequency
+        pair_positions.setdefault(pair, set()).add((seq_num, i))
 
 def _merge_pair_in_sequence(
     seq_num: int, 
@@ -153,7 +167,7 @@ def _merge_pair_in_sequence(
     right_id: int, 
     merged_id: int, 
     pair_counts: Counter[tuple[int, int]], 
-    pair_positions: dict[tuple[int, int], list[tuple[int, int]]]
+    pair_positions: dict[tuple[int, int], set[tuple[int, int]]]
 ) -> list[int]:
     merged_seq: list[int] = []
     i = 0
@@ -207,7 +221,9 @@ def run_train_bpe(
 
     pair_counts, pair_positions = _count_adjacent_pairs(sequences, frequiencies)
 
-    for _ in range(max_merges):
+    for i in range(max_merges):
+        if i % 100 == 0:
+            print(f"Merge {i}/{max_merges} - vocab size {len(vocab)}")
         if not pair_counts:
             break
         left_id, right_id = _select_best_pair(pair_counts, token_bytes)
@@ -219,7 +235,7 @@ def run_train_bpe(
         vocab[merged_id] = merged_token_bytes
         merges.append((token_bytes[left_id], token_bytes[right_id]))
 
-        affected_seq_ids = sorted({seq_id for seq_id, _ in pair_positions.get((left_id, right_id), [])})
+        affected_seq_ids = {seq_id for seq_id, _ in pair_positions.get((left_id, right_id), set())}
 
         for seq_id in affected_seq_ids:#注意对同一个seq只能处理1次，否则会出现重复合并的情况，比如一个pair在一个seq中出现了两次，那么第一次合并后这个pair就不存在了，如果第二次还处理这个seq就会出问题，所以只能处理一次
             sequences[seq_id] = _merge_pair_in_sequence(seq_id, sequences[seq_id], frequiencies[seq_id], left_id, right_id, merged_id, pair_counts, pair_positions)
