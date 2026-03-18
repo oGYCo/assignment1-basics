@@ -9,13 +9,16 @@ PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s
 
 _worker_pretoken_re: re.Pattern
 _worker_special_tokens: list[str]
-_worker_special_split_re: re.Pattern
+_worker_special_split_re: re.Pattern | None
 
 def _init_worker(pattern: str, special_tokens: list[str]):
     global _worker_pretoken_re, _worker_special_tokens, _worker_special_split_re
     _worker_pretoken_re = re.compile(pattern)
     _worker_special_tokens = special_tokens
-    _worker_special_split_re = re.compile("|".join(re.escape(token) for token in special_tokens))
+    if special_tokens:
+        _worker_special_split_re = re.compile("(" + "|".join(re.escape(token) for token in special_tokens) + ")")
+    else:
+        _worker_special_split_re = None
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -73,6 +76,9 @@ def _build_file_chunk_tasks(
     return [(input_path, start, end) for start, end in zip(boundaries[:-1], boundaries[1:])]
 
 def _iter_trainable_segments(text: str) -> Iterable[str]:
+    if _worker_special_split_re is None:
+        yield text
+        return
     for piece in _worker_special_split_re.split(text):
         if not piece:
             continue
@@ -172,9 +178,10 @@ def run_train_bpe(
     **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     base_vocab_size = 256 + len(special_tokens)
-    num_workers = max(1, cpu_count() - 1)
+    num_workers = max(1, cpu_count() - 2)
 
-    tasks = _build_file_chunk_tasks(input_path, num_workers, split_special_token=special_tokens[0].encode("utf-8"))
+    split_boundary = special_tokens[0].encode("utf-8") if special_tokens else b"\n\n"
+    tasks = _build_file_chunk_tasks(input_path, num_workers, split_special_token=split_boundary)
     pretoken_counts: Counter[bytes] = Counter()
 
     with Pool(num_workers, initializer=_init_worker, initargs=(PAT, special_tokens)) as pool:
@@ -201,6 +208,8 @@ def run_train_bpe(
     pair_counts, pair_positions = _count_adjacent_pairs(sequences, frequiencies)
 
     for _ in range(max_merges):
+        if not pair_counts:
+            break
         left_id, right_id = _select_best_pair(pair_counts, token_bytes)
 
         merged_token_bytes = token_bytes[left_id] + token_bytes[right_id]
