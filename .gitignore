@@ -6,7 +6,6 @@ __pycache__/
 
 # C extensions
 *.so
-cs336_basics/_train_bpe_cython.c
 data/
 # Distribution / packaging
 .Python

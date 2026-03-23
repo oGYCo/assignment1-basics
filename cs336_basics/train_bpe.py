@@ -3,7 +3,7 @@ import json
 import os
 from collections import Counter
 from multiprocessing import cpu_count, get_all_start_methods, get_context
-from typing import BinaryIO, Callable, Iterable, SupportsIndex, SupportsInt, cast
+from typing import BinaryIO, Iterable, SupportsIndex, SupportsInt, cast
 
 import regex as re
 
@@ -22,15 +22,6 @@ _worker_special_split_re: re.Pattern[str] | None
 _worker_single_special_token: str | None
 type PairHeapItem = tuple[int, int]
 type ConvertibleToInt = str | bytes | bytearray | SupportsInt | SupportsIndex
-type MergePairOccurrences = Callable[
-    [int, int, list[int], list[int], list[int], list[int], dict[int, int], dict[int, list[int]], list[PairHeapItem]],
-    None,
-]
-
-try:
-    from ._train_bpe_cython import merge_pair_occurrences as _merge_pair_occurrences_cython
-except ImportError:
-    _merge_pair_occurrences_cython = None
 
 
 def _decode_pair(pair: int) -> tuple[int, int]:
@@ -232,6 +223,8 @@ def _build_merge_state(
             prev_node = node_id
 
     return node_token, node_next, node_prev, node_frequency, pair_counts, pair_occurrences
+
+
 def _build_pair_heap(
     pair_counts: dict[int, int],
 ) -> list[PairHeapItem]:
@@ -288,7 +281,7 @@ def _select_best_pair_from_heap(
     return best_pair
 
 
-def _merge_pair_occurrences_python(
+def _merge_pair_occurrences(
     pair: int,
     merged_id: int,
     node_token: list[int],
@@ -379,12 +372,6 @@ def _merge_pair_occurrences_python(
             left_nodes.extend(appended_nodes)
 
 
-def _resolve_merge_pair_occurrences(use_cython: bool) -> MergePairOccurrences:
-    if use_cython and _merge_pair_occurrences_cython is not None:
-        return cast(MergePairOccurrences, _merge_pair_occurrences_cython)
-    return _merge_pair_occurrences_python
-
-
 def run_train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
@@ -393,7 +380,6 @@ def run_train_bpe(
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     base_vocab_size = 256 + len(special_tokens)
     num_workers = _resolve_num_workers(input_path, cast(ConvertibleToInt | None, kwargs.get("num_workers")))
-    merge_pair_occurrences = _resolve_merge_pair_occurrences(bool(kwargs.get("use_cython", True)))
     verbose = bool(kwargs.get("verbose", False))
 
     split_boundary = special_tokens[0].encode("utf-8") if special_tokens else b"\n\n"
@@ -426,7 +412,7 @@ def run_train_bpe(
         token_bytes.append(merged_token_bytes)
         merges.append((token_bytes[left_id], token_bytes[right_id]))
 
-        merge_pair_occurrences(
+        _merge_pair_occurrences(
             best_pair,
             merged_id,
             node_token,
@@ -443,7 +429,7 @@ def run_train_bpe(
 
 def main() -> None:
     vocab, merges = run_train_bpe(
-        "/Users/ogyco/PythonProject/cs336/assignment1-basics/data/owt_valid.txt",
+        "/Users/ogyco/PythonProject/cs336/assignment1-basics/data/owt_train.txt",
         32000,
         ["<|endoftext|>"],
     )
