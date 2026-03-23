@@ -2,9 +2,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.DS_Store
 
 # C extensions
 *.so
+cs336_basics/_train_bpe_cython.c
 data/
 # Distribution / packaging
 .Python
