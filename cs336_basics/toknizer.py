@@ -5,10 +5,10 @@ from typing import Iterable, Iterator
 
 import regex as re
 
-from .train_bpe import PAT
+from cs336_basics.train_bpe import PAT
 
 class BPETokenizer():
-    def __init__(self, vocab, merges, special_tokens=None):
+    def __init__(self, vocab, merges, special_tokens: list[str] | None = None):
         """
         vocab: dict[int, bytes]
         merges: list[tuple[bytes, bytes]]
@@ -30,12 +30,7 @@ class BPETokenizer():
             self._special_split_re = None
 
     @classmethod
-    def from_files(
-        cls,
-        vocab_filepath: str | os.PathLike[str],
-        merges_filepath: str | os.PathLike[str],
-        special_tokens: list[str] | None = None,
-    ):
+    def from_files(cls, vocab_filepath: str, merges_filepath: str, special_tokens: list[str] | None = None,) -> "BPETokenizer":
         with open(vocab_filepath, "r", encoding="utf-8") as f:
             raw_vocab = json.load(f)
         with open(merges_filepath, "r", encoding="utf-8") as f:
@@ -119,9 +114,8 @@ class BPETokenizer():
 
 
 def main():
-    data_dir = Path(__file__).resolve().parent.parent / "data"
-    vocab_filepath = data_dir / "owt_bpe_vocab.json"
-    merges_filepath = data_dir / "owt_bpe_merges.json"
+    vocab_filepath = "/Users/ogyco/PythonProject/cs336/assignment1-basics/data/owt_bpe_vocab.json"
+    merges_filepath = "/Users/ogyco/PythonProject/cs336/assignment1-basics/data/owt_bpe_merges.json"
     special_tokens = ["<|endoftext|>"]
     tokenizer = BPETokenizer.from_files(vocab_filepath, merges_filepath, special_tokens)
     text = "Hello, world!  How are you?, I am fine., thanks!, <|endoftext|> How are you doing today? I hope you are doing well. I am doing great, thank you for asking! <|endoftext|>"
