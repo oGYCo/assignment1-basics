@@ -14,6 +14,23 @@ def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: 
     attn_weights = softmax(scores, dim=-1)
     return attn_weights @ value
 
+def cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """
+    Compute the cross entropy loss between the predictions and targets.
+
+     Args:
+        logits: Float[Tensor, " batch_size sequence_length vocab_size"]: The output of the model before softmax.
+        targets: Long[Tensor, " batch_size sequence_length"]: The ground truth token ids.
+
+    Returns:
+        Float[Tensor]: The average cross entropy loss over the batch.
+    """
+    shifted_logits = logits - logits.max(dim=-1, keepdim=True).values
+    logsumexp = torch.log(torch.exp(shifted_logits).sum(dim=-1))
+    target_logits = shifted_logits.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
+    target_log_probs = target_logits - logsumexp
+    return -target_log_probs.mean()
+
 class Linear(nn.Module):
     def __init__(self, in_features: int, out_features: int, device = None, dtype = None):
         super().__init__()
