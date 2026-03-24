@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 
+def softmax(x: torch.Tensor, i: int) -> torch.Tensor:
+    x = x - x.max(dim=i, keepdim=True).values
+    x = x.exp()
+    return x / x.sum(dim=i, keepdim=True)
+
 class Linear(nn.Module):
     def __init__(self, in_features: int, out_features: int, device = None, dtype = None):
         super().__init__()
@@ -103,3 +108,11 @@ class RotaryPositionalEmbedding(nn.Module):
         out[..., 0::2] = x_even_out
         out[..., 1::2] = x_odd_out
         return out
+
+
+def main():
+    x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    print(softmax(x, i=-1))
+
+if __name__ == "__main__":
+    main()
