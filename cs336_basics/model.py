@@ -118,7 +118,7 @@ class RotaryPositionalEmbedding(nn.Module):
         return out
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, device = None, dtype = None, use_rope: bool = False, theta: float = 10000.0, max_seq_len: int = 1024):
+    def __init__(self, d_model: int, num_heads: int, device = None, dtype = None, use_rope: bool = False, theta: float = 10000.0, max_seq_len: int = 2048):
         super().__init__()
         assert d_model % num_heads == 0
         self.d_model = d_model
@@ -143,6 +143,9 @@ class CausalSelfAttention(nn.Module):
         k = self.k_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
 
+        if hasattr(self, "rope") and token_positions is None:
+            token_positions = torch.arange(T, device=x.device)
+
         q = self.rope(q, token_positions) if hasattr(self, "rope") else q
         k = self.rope(k, token_positions) if hasattr(self, "rope") else k
 
@@ -151,7 +154,18 @@ class CausalSelfAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous().view(B, T, self.d_model)
         return self.out_proj(attn_output)
 
-        
+class Block(nn.Module):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, device = None, dtype = None, theta: float = 10000.0, max_seq_len: int = 2048):
+        super().__init__()
+        self.attn = CausalSelfAttention(d_model, num_heads, device=device, dtype=dtype, use_rope=True, theta=theta, max_seq_len=max_seq_len)
+        self.ffn = FFN(d_model, d_ff, device=device, dtype=dtype)
+        self.norm1 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.norm2 = RMSNorm(d_model, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.norm1(x))
+        x = x + self.ffn(self.norm2(x))
+        return x
 
 def main():
     x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
