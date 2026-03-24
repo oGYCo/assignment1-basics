@@ -435,13 +435,13 @@ def main() -> None:
     )
     with open("/Users/ogyco/PythonProject/cs336/assignment1-basics/data/owt_bpe_vocab.json", "w") as f:
         json.dump(
-            {token_id: token_bytes.decode("utf-8", errors="ignore") for token_id, token_bytes in vocab.items()},
+            {token_id: token_bytes.decode("latin-1") for token_id, token_bytes in vocab.items()},
             f,
             indent=2,
         )
     with open("/Users/ogyco/PythonProject/cs336/assignment1-basics/data/owt_bpe_merges.json", "w") as f:
         json.dump(
-            [(left.decode("utf-8", errors="ignore"), right.decode("utf-8", errors="ignore")) for left, right in merges],
+            [(left.decode("latin-1"), right.decode("latin-1")) for left, right in merges],
             f,
             indent=2,
         )
