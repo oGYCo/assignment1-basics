@@ -1,17 +1,17 @@
 import torch
 import torch.nn as nn
 
-def softmax(x: torch.Tensor, i: int) -> torch.Tensor:
-    x = x - x.max(dim=i, keepdim=True).values
+def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
+    x = x - x.max(dim=dim, keepdim=True).values
     x = x.exp()
-    return x / x.sum(dim=i, keepdim=True)
+    return x / x.sum(dim=dim, keepdim=True)
 
 def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
     d_k = query.shape[-1]
     scores = query @ key.transpose(-2, -1) / (d_k ** 0.5)
     if mask is not None:
         scores = scores.masked_fill(mask == False, float('-inf'))
-    attn_weights = softmax(scores, i=-1)
+    attn_weights = softmax(scores, dim=-1)
     return attn_weights @ value
 
 class Linear(nn.Module):
@@ -167,9 +167,39 @@ class Block(nn.Module):
         x = x + self.ffn(self.norm2(x))
         return x
 
+class Transformer(nn.Module):
+    def __init__(
+            self, 
+            vocab_size: int, 
+            context_length: int, 
+            d_model: int, 
+            num_layers: int, 
+            num_heads: int, 
+            d_ff: int, 
+            rope_theta: float,
+            device = None,
+            dtype = None
+    ):
+        super().__init__()
+        self.token_embedding = Embedding(vocab_size, d_model, device=device, dtype=dtype)
+        self.layers = nn.ModuleList([
+            Block(d_model, num_heads, d_ff, device=device, dtype=dtype, theta
+            =rope_theta, max_seq_len=context_length) for _ in range(num_layers)
+        ])
+        self.norm = RMSNorm(d_model, device=device, dtype=dtype)
+        self.output_projection = Linear(d_model, vocab_size, device=device, dtype=dtype)
+
+    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        x = self.token_embedding(token_ids)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.norm(x)
+        return self.output_projection(x)
+        
+
 def main():
     x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    print(softmax(x, i=-1))
+    print(softmax(x, dim=-1))
 
 if __name__ == "__main__":
     main()
