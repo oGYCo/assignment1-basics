@@ -65,3 +65,41 @@ class FFN(nn.Module):
         gate = torch.sigmoid(hidden1) * hidden1
         value = self.linear3(x)
         return self.linear2(gate * value)
+    
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device = None):
+        """
+        Args:
+            theta (float): The theta parameter for the RoPE embeddings.
+            d_k (int): The dimensionality of the query and key vectors.
+            max_seq_len (int): The maximum sequence length for which to precompute embeddings.
+            device: The device to sotre the buffer on.
+        """
+        super().__init__()
+        self.theta = theta
+        assert d_k % 2 == 0
+        self.d_k = d_k
+
+        idx = torch.arange(0, d_k, 2, device=device, dtype=torch.float32) / d_k
+        inv_freq = 1.0 / (theta ** idx)
+
+        position_ids = torch.arange(max_seq_len, device=device, dtype=torch.float32)
+        angles = position_ids[:, None] * inv_freq[None, :]
+
+        self.register_buffer("cos", torch.cos(angles), persistent=False)
+        self.register_buffer("sin", torch.sin(angles), persistent=False)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        cos = self.get_buffer("cos")[token_positions].to(dtype=x.dtype, device=x.device)
+        sin = self.get_buffer("sin")[token_positions].to(dtype=x.dtype, device=x.device)
+
+        x_even = x[..., 0::2]
+        x_odd = x[..., 1::2]
+
+        x_even_out = x_even * cos - x_odd * sin
+        x_odd_out = x_even * sin + x_odd * cos
+
+        out = torch.empty_like(x)
+        out[..., 0::2] = x_even_out
+        out[..., 1::2] = x_odd_out
+        return out
