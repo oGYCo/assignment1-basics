@@ -6,6 +6,14 @@ def softmax(x: torch.Tensor, i: int) -> torch.Tensor:
     x = x.exp()
     return x / x.sum(dim=i, keepdim=True)
 
+def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
+    d_k = query.shape[-1]
+    scores = query @ key.transpose(-2, -1) / (d_k ** 0.5)
+    if mask is not None:
+        scores = scores.masked_fill(mask == False, float('-inf'))
+    attn_weights = softmax(scores, i=-1)
+    return attn_weights @ value
+
 class Linear(nn.Module):
     def __init__(self, in_features: int, out_features: int, device = None, dtype = None):
         super().__init__()
