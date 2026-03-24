@@ -90,7 +90,14 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = model.FFN(d_model, d_ff, device=w1_weight.device, dtype=w1_weight.dtype)
+    state = {
+        "linear1.weight": w1_weight,
+        "linear2.weight": w2_weight,
+        "linear3.weight": w3_weight,
+    }
+    swiglu.load_state_dict(state)
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(

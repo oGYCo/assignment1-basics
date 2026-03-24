@@ -42,3 +42,26 @@ class RMSNorm(nn.Module):
         # The output should be in the same dtype as the input, so we convert it back before multiplying by the weight.
         return result.to(in_dtype) * self.weight
         
+class FFN(nn.Module):
+    def __init__(self, d_model: int, d_ff: int, device = None, dtype = None):
+        """
+        Initialize the feed-forward network.
+
+        Args:
+            d_model (int): The dimensionality of the input and output.
+            d_ff (int): The dimensionality of the hidden layer.
+            device: The device to run the network on.
+            dtype: The data type of the network.
+
+        SwiGLU: W2 @ (SiLU(W1 @ x) * (W3 @ x))
+        """
+        super().__init__()
+        self.linear1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.linear2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.linear3 = Linear(d_model, d_ff, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        hidden1 = self.linear1(x)
+        gate = torch.sigmoid(hidden1) * hidden1
+        value = self.linear3(x)
+        return self.linear2(gate * value)
