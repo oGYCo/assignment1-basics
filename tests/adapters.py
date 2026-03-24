@@ -152,7 +152,15 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    causal_self_attention = model.CausalSelfAttention(d_model, num_heads, device=q_proj_weight.device, dtype=q_proj_weight.dtype, use_rope=False)
+    state = {
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "out_proj.weight": o_proj_weight,
+    }
+    causal_self_attention.load_state_dict(state)
+    return causal_self_attention(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -192,8 +200,15 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
-
+    causal_self_attention = model.CausalSelfAttention(d_model, num_heads, device=q_proj_weight.device, dtype=q_proj_weight.dtype, use_rope=True, theta=theta, max_seq_len=max_seq_len)
+    state = {
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "out_proj.weight": o_proj_weight,
+    }
+    causal_self_attention.load_state_dict(state)
+    return causal_self_attention(in_features, token_positions) if token_positions is not None else causal_self_attention(in_features)
 
 def run_rope(
     d_k: int,

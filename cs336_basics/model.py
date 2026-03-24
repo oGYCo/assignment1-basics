@@ -117,6 +117,41 @@ class RotaryPositionalEmbedding(nn.Module):
         out[..., 1::2] = x_odd_out
         return out
 
+class CausalSelfAttention(nn.Module):
+    def __init__(self, d_model: int, num_heads: int, device = None, dtype = None, use_rope: bool = False, theta: float = 10000.0, max_seq_len: int = 1024):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        if use_rope:
+            self.rope = RotaryPositionalEmbedding(
+                theta=theta, 
+                d_k=self.head_dim, 
+                max_seq_len=max_seq_len, 
+                device=device
+            )
+
+        self.q_proj = Linear(d_model, num_heads * self.head_dim, device=device, dtype=dtype)
+        self.k_proj = Linear(d_model, num_heads * self.head_dim, device=device, dtype=dtype)
+        self.v_proj = Linear(d_model, num_heads * self.head_dim, device=device, dtype=dtype)
+        self.out_proj = Linear(d_model, d_model, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
+        B, T, _ = x.shape
+        q = self.q_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x).view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+
+        q = self.rope(q, token_positions) if hasattr(self, "rope") else q
+        k = self.rope(k, token_positions) if hasattr(self, "rope") else k
+
+        mask = torch.tril(torch.ones((T, T), device=x.device)).bool()
+        attn_output = scaled_dot_product_attention(q, k, v, mask)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(B, T, self.d_model)
+        return self.out_proj(attn_output)
+
+        
 
 def main():
     x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
