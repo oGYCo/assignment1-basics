@@ -11,7 +11,22 @@ def get_lr_cosine_schedule(t, max_lr, min_lr, T_w, T_c):
         return min_lr + 0.5 * (max_lr - min_lr) * (1 + math.cos(math.pi * (t - T_w) / (T_c - T_w)))
     else:
         return min_lr
-    
+
+def gradient_clipping(parameters, max_norm, eps=1e-6):
+    parameters = [p for p in parameters if p.grad is not None]
+    total_norm = torch.tensor(0.0, device=parameters[0].grad.device)
+
+    for p in parameters:
+        total_norm += (p.grad ** 2).sum()
+
+    total_norm = torch.sqrt(total_norm)
+    clip_coef = max_norm / (total_norm + eps)
+    if clip_coef < 1:
+        for p in parameters:
+            p.grad.mul_(clip_coef)
+
+
+
 class AdamW(torch.optim.Optimizer):
     def __init__(self, params, lr=1e-5, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-2):
         self.lr = lr
